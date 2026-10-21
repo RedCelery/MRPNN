@@ -3,6 +3,19 @@
 
 #include "vector.cuh"
 #include "tensor.cuh"
+#include "mrpnn_features.cuh"
+#ifdef MRPNN_TRACE
+#include "network_trace.cuh"
+__device__ NetworkTrace *mrpnnTrace = nullptr;
+__device__ int mrpnnTraceCount = 0;
+#define TRACE_COPY(field, source, count) \
+    if (trace) Rep(trace->field, source, count, 0, 0);
+#define TRACE_RESIDUAL(index) \
+    if (trace) Rep(trace->residuals, X_ValA, 16, traceChannel * 96 + index * 16, 0);
+#else
+#define TRACE_COPY(field, source, count)
+#define TRACE_RESIDUAL(index)
+#endif
 
 
 // ---------------------------------------------------------
@@ -302,18 +315,17 @@ __device__ inline void Rep(float* A, const float* B, const int Size, const int A
 // ---------------------------------------------------------
 // Networks
 // ---------------------------------------------------------
+#ifdef MRPNN_WEIGHT_HEADER
+#include MRPNN_WEIGHT_HEADER
+#else
 #include "NNWeight.cuh"
+#endif
 
-__device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, float3 LightDir, float3 XMain, float3 YMain, float3 ZMain, float3 LXMain, float3 LYMain, float3 LZMain, float alpha, float g, float3 scatterrate)
+__device__ void ExtractMRPNNFeatures(bool active, float3 pos, float3 LightDir,
+    float3 XMain, float3 YMain, float3 ZMain, float3 LXMain,
+    float alpha, float g, float* X_Val, float* X_Val_Sub, float* X_Val_Hg)
 {
     const int PC = 192;
-    const int DI = 160;
-    const int POOL = 36;
-    const int P_DI = 24;
-
-    float X_Val[PC];
-    float X_Val_Sub[PC];
-    float X_Val_Hg[PC];
     int randIndex = 0;
 
     if (active) {
@@ -367,6 +379,14 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
         }
     }
 
+}
+
+__device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, float3 LightDir, float3 XMain, float3 YMain, float3 ZMain, float3 LXMain, float3 LYMain, float3 LZMain, float alpha, float g, float3 scatterrate)
+{
+    const int PC = 192, DI = 160, POOL = 36, P_DI = 24;
+    float X_Val[PC], X_Val_Sub[PC], X_Val_Hg[PC];
+    ExtractMRPNNFeatures(active, pos, LightDir, XMain, YMain, ZMain, LXMain,
+                        alpha, g, X_Val, X_Val_Sub, X_Val_Hg);
     float X_ValA[160];
     float X_ValB[160];
     float X_ValC[160];
@@ -391,6 +411,21 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
     scbasez[0] = srp.z;
     AvgPool[POOL + POOL] = g;
     AvgPool[POOL + POOL + 1] = gamma;
+#ifdef MRPNN_TRACE
+    const int traceIndex = blockIdx.x * blockDim.x + threadIdx.x;
+    auto *trace = mrpnnTrace && traceIndex < mrpnnTraceCount
+        ? mrpnnTrace + traceIndex : nullptr;
+    int traceChannel = 0;
+    if (trace) {
+        trace->g = g; trace->gamma = gamma;
+        trace->albedo[0] = scatterrate.x;
+        trace->albedo[1] = scatterrate.y;
+        trace->albedo[2] = scatterrate.z;
+    }
+    TRACE_COPY(density, X_Val, 192)
+    TRACE_COPY(transmittance, X_Val_Sub, 192)
+    TRACE_COPY(phase, X_Val_Hg, 192)
+#endif
     __syncwarp();
     // run NN
     SE(0, 0, 8, 0, LSE01W, LSE02W, L01, L_Tr01, L_Hg01)
@@ -435,12 +470,15 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
         LinearReLU_SFL<8>(X_ValA2, Comb, LD41W, LD41B, 24, 96);//Last layer.parse in 0~8
     LinearReLU_SFL<8>(X_ValB2, Comb, LD_Tr41W, LD_Tr41B, 24, 104);
     LinearReLU_SFL<8>(X_ValC2, Comb, LD_Hg41W, LD_Hg41B, 24, 112);
+    TRACE_COPY(combined, Comb, 120)
     //
 #define SC(p,P) { AvgPool[POOL + POOL + 2] = scbase##p##[0];\
     Rep(X_ValA, Comb, 120, 0, 0);\
     LinearReLU(AvgPool, X_ValA, 3, 8, POOL + POOL, 120, LGGSW, LGGSB);\
     LinearReLU_Unbias(AvgPool, AvgWeight, 75, 16, 0, 0, LSEFin1W);\
     LinearSm_Unbias(AvgWeight, AvgWeightPool, 16, 6, 0, 0, LSEFin2W);\
+    TRACE_COPY(pooled, AvgPool, 75)\
+    if_trace_gates \
     MUL(X_ValA, 32, 0, AvgWeightPool[0]);\
     MUL(X_ValA, 32, 32, AvgWeightPool[1]);\
     MUL(X_ValA, 32, 64, AvgWeightPool[2]);\
@@ -451,38 +489,65 @@ __device__ float3 RadiancePredict(curandState* seed, bool active, float3 pos, fl
     LinearReLU_SFL<128, 64>(X_ValB, X_ValA, LC1W, LC1B);\
     LinearReLU_SFL<64, 32>(X_ValA, X_ValB, LC2W, LC2B);\
     LinearReLU_SFL<32, 16>(X_ValB, X_ValA, LXW, LXB);\
+    if_trace_reduced \
     LinearReLU_SFL<16>(X_ValA, X_ValB, LX0W, LX0B);\
     LinearReLU_SFL<16>(X_ValB, X_ValC, LX1W, LX1B);\
     Add(X_ValA, X_ValC, 16, 0, 0);\
+    TRACE_RESIDUAL(0)\
     LinearReLU_SFL<16>(X_ValA, X_ValB, LX2W, LX2B);\
     LinearReLU_SFL<16>(X_ValB, X_ValC, LX3W, LX3B);\
     Add(X_ValA, X_ValC, 16, 0, 0);\
+    TRACE_RESIDUAL(1)\
     LinearReLU_SFL<16>(X_ValA, X_ValB, LX4W, LX4B);\
     LinearReLU_SFL<16>(X_ValB, X_ValC, LX5W, LX5B);\
     Add(X_ValA, X_ValC, 16, 0, 0);\
+    TRACE_RESIDUAL(2)\
     LinearReLU_SFL<16>(X_ValA, X_ValB, LX6W, LX6B);\
     LinearReLU_SFL<16>(X_ValB, X_ValC, LX7W, LX7B);\
     Add(X_ValA, X_ValC, 16, 0, 0);\
+    TRACE_RESIDUAL(3)\
     LinearReLU_SFL<16>(X_ValA, X_ValB, LX8W, LX8B);\
     LinearReLU_SFL<16>(X_ValB, X_ValC, LX9W, LX9B);\
     Add(X_ValA, X_ValC, 16, 0, 0);\
+    TRACE_RESIDUAL(4)\
     LinearReLU_SFL<16>(X_ValA, X_ValB, LX10W, LX10B);\
     LinearReLU_SFL<16>(X_ValB, X_ValC, LX11W, LX11B);\
     Add(X_ValA, X_ValC, 16, 0, 0);\
+    TRACE_RESIDUAL(5)\
     LinearReLU(X_ValA, X_ValB, 16, 1, 0, 0, LX12W, LX12B);\
     P = X_ValB[0]; }\
 
+#ifdef MRPNN_TRACE
+#define if_trace_gates if (trace) Rep(trace->gates, AvgWeightPool, 6, traceChannel * 6, 0);
+#define if_trace_reduced if (trace) Rep(trace->reduced, X_ValA, 16, traceChannel * 16, 0);
+#else
+#define if_trace_gates
+#define if_trace_reduced
+#endif
     float X, Y, Z;
     SC(x, X);
 
+#ifdef MRPNN_TRACE
+    traceChannel = 1;
+#endif
     if (scatterrate.y == scatterrate.x) Y = X;
     else SC(y, Y);
 
+#ifdef MRPNN_TRACE
+    traceChannel = 2;
+#endif
     if (scatterrate.z == scatterrate.x) Z = X;
     else if (scatterrate.z == scatterrate.y) Z = Y;
     else  SC(z, Z);
 
-    return max((exp(float3{ X,Y,Z })) - 1.0, float3{ 0 }) * srp;
+    const auto result = max((exp(float3{ X,Y,Z })) - 1.0, float3{ 0 }) * srp;
+#ifdef MRPNN_TRACE
+    if (trace) {
+        trace->logits[0] = X; trace->logits[1] = Y; trace->logits[2] = Z;
+        trace->radiance[0] = result.x; trace->radiance[1] = result.y; trace->radiance[2] = result.z;
+    }
+#endif
+    return result;
 }
 
 

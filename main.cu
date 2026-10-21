@@ -5,11 +5,16 @@
 #include <chrono>
 #include <random>
 #include <iomanip>
+#include <filesystem>
 
-int main()
+int main(int argc, char **argv)
 {
 #if 1
-    string cloud_path = "./TestCase/CLOUD0";
+    string cloud_path = argc > 1 ? argv[1] : "./TestCase/CLOUD03";
+    if (!std::filesystem::exists(cloud_path + ".bin")) {
+        std::cerr << "Missing volume: " << cloud_path << ".bin\n";
+        return 1;
+    }
     VolumeRender v(cloud_path);
     float3 lightColor = { 1.0, 1.0, 1.0 };
     float alpha = 1;

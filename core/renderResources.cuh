@@ -16,32 +16,32 @@
 
 #include "vector.cuh"
 
-extern texture<float, cudaTextureType2D, cudaReadModeElementType> _HGLut;
+extern __device__ cudaTextureObject_t _HGLut;
 
 
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _DensityVolume;
+extern __device__ cudaTextureObject_t _DensityVolume;
 
 #define Mip(i) _Mips##i
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips0;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips1;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips2;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips3;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips4;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips5;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips6;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips7;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips8;
+extern __device__ cudaTextureObject_t _Mips0;
+extern __device__ cudaTextureObject_t _Mips1;
+extern __device__ cudaTextureObject_t _Mips2;
+extern __device__ cudaTextureObject_t _Mips3;
+extern __device__ cudaTextureObject_t _Mips4;
+extern __device__ cudaTextureObject_t _Mips5;
+extern __device__ cudaTextureObject_t _Mips6;
+extern __device__ cudaTextureObject_t _Mips7;
+extern __device__ cudaTextureObject_t _Mips8;
 #define TR_Mip(i) _TR_Mips##i
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips0;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips1;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips2;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips3;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips4;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips5;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips6;
-extern texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips7;
+extern __device__ cudaTextureObject_t _TR_Mips0;
+extern __device__ cudaTextureObject_t _TR_Mips1;
+extern __device__ cudaTextureObject_t _TR_Mips2;
+extern __device__ cudaTextureObject_t _TR_Mips3;
+extern __device__ cudaTextureObject_t _TR_Mips4;
+extern __device__ cudaTextureObject_t _TR_Mips5;
+extern __device__ cudaTextureObject_t _TR_Mips6;
+extern __device__ cudaTextureObject_t _TR_Mips7;
 
-extern texture<float4, cudaTextureType2D> _HDRI;
+extern __device__ cudaTextureObject_t _HDRI;
 
 #define MipDensityStatic(mip, pos) tex3D<float>(Mip(mip), (pos).z + 0.5, (pos).y + 0.5, (pos).x + 0.5)
 #define MipTrStatic(mip, pos) tex3D<float>(TR_Mip(mip), (pos).z + 0.5, (pos).y + 0.5, (pos).x + 0.5)

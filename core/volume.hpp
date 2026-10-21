@@ -51,8 +51,8 @@ class VolumeRender {
 	bool last_predict = true;
 
 	float hginlut = -100;
-	float3 tr_lightDir;
-	float tr_alpha;
+	float3 tr_lightDir = {0,0,0};
+	float tr_alpha = -1;
 
 	float* mips[9];
 	float* tr_mips[8];

@@ -24,10 +24,15 @@ Option(DISABLE_FAST_MATH OFF)
 
 if (GUI)
     add_definitions(-DGUI)
-    find_package(GLEW)
-    find_package(glfw3)
+    include(FetchContent)
+    set(glew-cmake_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    set(glew-cmake_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(glew URL https://codeload.github.com/Perlmint/glew-cmake/zip/refs/tags/glew-cmake-2.2.0)
+    FetchContent_Declare(glfw URL https://codeload.github.com/glfw/glfw/zip/refs/tags/3.4)
+    FetchContent_MakeAvailable(glew glfw)
+    add_library(GLEW::GLEW ALIAS libglew_static)
     add_subdirectory(Imgui)
-	INCLUDE_DIRECTORIES(Imgui_INCLUDE_DIR)
+    include_directories(${PROJECT_SOURCE_DIR})
 endif()
 
 if (CompileRPNN)
@@ -68,8 +73,57 @@ CXX_STANDARD_REQUIRED ON
 CXX_STANDARD 17)
 target_compile_definitions(Test PRIVATE _HAS_STD_BYTE=0)
 
+add_executable(NetworkProbe ${CORE_HEADERS} ${CORE_SOURCES} training/probe.cu)
+set_target_properties(NetworkProbe PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+    CXX_STANDARD 17 CUDA_STANDARD 17)
+target_compile_definitions(NetworkProbe PRIVATE _HAS_STD_BYTE=0 MRPNN_TRACE)
+target_compile_options(NetworkProbe PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
-if (DISABLE_FAST_MATH)
+set(MRPNN_FITTED_WEIGHT_HEADER "" CACHE FILEPATH "Exported physical-fit CUDA weights")
+if (MRPNN_FITTED_WEIGHT_HEADER)
+    if (NOT EXISTS "${MRPNN_FITTED_WEIGHT_HEADER}")
+        message(FATAL_ERROR "Fitted weight header does not exist")
+    endif()
+    file(TO_CMAKE_PATH "${MRPNN_FITTED_WEIGHT_HEADER}" FITTED_HEADER_PATH)
+    add_executable(FittedNetworkProbe ${CORE_HEADERS} ${CORE_SOURCES} training/probe.cu)
+    set_target_properties(FittedNetworkProbe PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+        CXX_STANDARD 17 CUDA_STANDARD 17)
+    target_compile_definitions(FittedNetworkProbe PRIVATE _HAS_STD_BYTE=0 MRPNN_TRACE
+        MRPNN_WEIGHT_HEADER="${FITTED_HEADER_PATH}")
+    target_compile_options(FittedNetworkProbe PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+    add_executable(FittedRenderCompare ${CORE_HEADERS} ${CORE_SOURCES} training/render_compare.cu)
+    set_target_properties(FittedRenderCompare PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+        CXX_STANDARD 17 CUDA_STANDARD 17)
+    target_compile_definitions(FittedRenderCompare PRIVATE _HAS_STD_BYTE=0
+        MRPNN_WEIGHT_HEADER="${FITTED_HEADER_PATH}")
+    target_compile_options(FittedRenderCompare PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+endif()
+
+add_executable(RenderCompare ${CORE_HEADERS} ${CORE_SOURCES} training/render_compare.cu)
+set_target_properties(RenderCompare PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+    CXX_STANDARD 17 CUDA_STANDARD 17)
+target_compile_definitions(RenderCompare PRIVATE _HAS_STD_BYTE=0)
+target_compile_options(RenderCompare PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+
+add_executable(DatasetGen ${CORE_HEADERS} ${CORE_SOURCES} training/dataset.cu)
+set_target_properties(DatasetGen PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+    CXX_STANDARD 17 CUDA_STANDARD 17)
+target_compile_definitions(DatasetGen PRIVATE _HAS_STD_BYTE=0)
+target_compile_options(DatasetGen PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+
+if (CMAKE_CUDA_ARCHITECTURES)
+    foreach(target VolumeRender Test DataGen)
+        target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+        if (NOT DISABLE_FAST_MATH)
+            target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+        endif()
+    endforeach()
+elseif (DISABLE_FAST_MATH)
     if (RTX30XX)
     target_compile_options(VolumeRender PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_86 -maxrregcount=168>)
     target_compile_options(Test PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_86 -maxrregcount=168>)

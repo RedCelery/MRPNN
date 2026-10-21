@@ -1,31 +1,31 @@
 #include "renderResources.cuh"
 
 
-texture<float, cudaTextureType2D, cudaReadModeElementType> _HGLut;
+__device__ cudaTextureObject_t _HGLut = 0;
 
 
-texture<float, cudaTextureType3D, cudaReadModeElementType> _DensityVolume;
+__device__ cudaTextureObject_t _DensityVolume = 0;
 
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips0;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips1;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips2;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips3;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips4;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips5;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips6;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips7;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _Mips8;
+__device__ cudaTextureObject_t _Mips0 = 0;
+__device__ cudaTextureObject_t _Mips1 = 0;
+__device__ cudaTextureObject_t _Mips2 = 0;
+__device__ cudaTextureObject_t _Mips3 = 0;
+__device__ cudaTextureObject_t _Mips4 = 0;
+__device__ cudaTextureObject_t _Mips5 = 0;
+__device__ cudaTextureObject_t _Mips6 = 0;
+__device__ cudaTextureObject_t _Mips7 = 0;
+__device__ cudaTextureObject_t _Mips8 = 0;
 
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips0;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips1;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips2;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips3;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips4;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips5;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips6;
-texture<float, cudaTextureType3D, cudaReadModeElementType> _TR_Mips7;
+__device__ cudaTextureObject_t _TR_Mips0 = 0;
+__device__ cudaTextureObject_t _TR_Mips1 = 0;
+__device__ cudaTextureObject_t _TR_Mips2 = 0;
+__device__ cudaTextureObject_t _TR_Mips3 = 0;
+__device__ cudaTextureObject_t _TR_Mips4 = 0;
+__device__ cudaTextureObject_t _TR_Mips5 = 0;
+__device__ cudaTextureObject_t _TR_Mips6 = 0;
+__device__ cudaTextureObject_t _TR_Mips7 = 0;
 
-texture<float4, cudaTextureType2D> _HDRI;
+__device__ cudaTextureObject_t _HDRI = 0;
 
 
 __device__ float MipDensityDynamic(int mip, float3 pos) {

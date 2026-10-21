@@ -399,13 +399,13 @@ __device__ float4 BRDF(float3 normal, const float3 viewDir, const float3 lightDi
     float shiftAmount = dot(normal, viewDir);
     normal = shiftAmount < 0.0f ? normal + viewDir * (-shiftAmount + 1e-5f) : normal;
 
-    float nv = saturate(dot(normal, viewDir));
+    float nv = saturate_(dot(normal, viewDir));
 
-    float nl = saturate(dot(normal, lightDir));
-    float nh = saturate(dot(normal, floatDir));
+    float nl = saturate_(dot(normal, lightDir));
+    float nh = saturate_(dot(normal, floatDir));
 
-    float lv = saturate(dot(lightDir, viewDir));
-    float lh = saturate(dot(lightDir, floatDir));
+    float lv = saturate_(dot(lightDir, viewDir));
+    float lh = saturate_(dot(lightDir, floatDir));
 
     float roughness = 0.008;
 

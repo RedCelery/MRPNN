@@ -1,3 +1,4 @@
+#include "cuda_objects.hpp"
 #include "volume.hpp"
 
 #include "hdr_loader.h"
@@ -1020,7 +1021,7 @@ __device__ float HaltonSampleDimension(unsigned int dim, unsigned int index) {
     return ScrambledRadicalInverse(dim, index);
 }
 
-surface<void, cudaSurfaceType2D> hgSurfRef;
+__device__ cudaSurfaceObject_t hgSurfRef = 0;
 __global__ void Fill_Hg(float g) {
 
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1104,7 +1105,7 @@ void VolumeRender::UpdateHGLut(float g)
 {
     if (g == hginlut) return;
 
-    cudaBindSurfaceToArray(hgSurfRef, hglut_dev);
+    BindSurfaceObject(hgSurfRef, hglut_dev);
 
     CheckError;
 
@@ -1112,12 +1113,7 @@ void VolumeRender::UpdateHGLut(float g)
 
     CheckError;
 
-    _HGLut.normalized = true;
-    _HGLut.filterMode = cudaFilterModeLinear;
-    _HGLut.addressMode[0] = cudaAddressModeClamp;
-    _HGLut.addressMode[1] = cudaAddressModeClamp;
-    _HGLut.addressMode[2] = cudaAddressModeClamp;
-    cudaBindTextureToArray(_HGLut, hglut_dev);
+    BindTextureObject(_HGLut, hglut_dev, cudaAddressModeClamp);
 
     CheckError;
 
@@ -1150,13 +1146,7 @@ void VolumeRender::Update() {
     copyParams.kind = cudaMemcpyHostToDevice;
     cudaMemcpy3D(&copyParams);
     CheckError;
-    _DensityVolume.normalized = true;
-    _DensityVolume.filterMode = cudaFilterModeLinear;
-    _DensityVolume.addressMode[0] = cudaAddressModeBorder;
-    _DensityVolume.addressMode[1] = cudaAddressModeBorder;
-    _DensityVolume.addressMode[2] = cudaAddressModeBorder;
-
-    cudaBindTextureToArray(_DensityVolume, datas_dev, channel_desc);
+    BindTextureObject(_DensityVolume, datas_dev, cudaAddressModeBorder);
     CheckError;
     float md = 0.00001;
     for (int i = 0; i < resolution * resolution * resolution; i++)
@@ -1206,12 +1196,7 @@ void VolumeRender::Update() {
 
         CheckError;
     }
-    #define BindMip(i)  Mip(i).normalized = true;\
-                        Mip(i).filterMode = cudaFilterModeLinear;\
-                        Mip(i).addressMode[0] = cudaAddressModeBorder;\
-                        Mip(i).addressMode[1] = cudaAddressModeBorder;\
-                        Mip(i).addressMode[2] = cudaAddressModeBorder;\
-                        cudaBindTextureToArray(Mip(i), mips_dev[i], channel_desc);
+    #define BindMip(i) BindTextureObject(Mip(i), mips_dev[i], cudaAddressModeBorder);
 
     BindMip(0); BindMip(1); BindMip(2);
     BindMip(3); BindMip(4); BindMip(5);
@@ -1222,8 +1207,8 @@ void VolumeRender::Update() {
     CheckError;
 }
 
-texture<float, cudaTextureType3D, cudaReadModeElementType>  texRef;
-surface<void, cudaSurfaceType3D> surfRef;
+__device__ cudaTextureObject_t texRef = 0;
+__device__ cudaSurfaceObject_t surfRef = 0;
 __global__ void Fill_TR(int res, float alpha, float3 lightDir) {
 
     unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1302,13 +1287,8 @@ void VolumeRender::Update_TR(float3 lightDir,float alpha, bool CPU)
             res = 128 >> tr_mip;
             float alphaScale = pow(1.73f, tr_mip + 1.0f);
              
-            texRef.normalized = true;
-            texRef.filterMode = cudaFilterModeLinear;
-            texRef.addressMode[0] = cudaAddressModeBorder;
-            texRef.addressMode[1] = cudaAddressModeBorder;
-            texRef.addressMode[2] = cudaAddressModeBorder;
-            cudaBindTextureToArray(texRef, mips_dev[tr_mip + 1]);
-            cudaBindSurfaceToArray(surfRef, tr_mips_dev[tr_mip]);
+            BindTextureObject(texRef, mips_dev[tr_mip + 1], cudaAddressModeBorder);
+            BindSurfaceObject(surfRef, tr_mips_dev[tr_mip]);
 
             dim3 gourp_size = dim3(4, 4, 4);
             dim3 gourp_num = dim3((res + 3) / 4, (res + 3) / 4, (res + 3) / 4);
@@ -1316,12 +1296,7 @@ void VolumeRender::Update_TR(float3 lightDir,float alpha, bool CPU)
             Fill_TR<<<gourp_num, gourp_size>>>(res, alpha / alphaScale, lightDir);
         }
     }
-#define BindTR_Mip(i)   TR_Mip(i).normalized = true;\
-                                TR_Mip(i).filterMode = cudaFilterModeLinear;\
-                                TR_Mip(i).addressMode[0] = cudaAddressModeClamp;\
-                                TR_Mip(i).addressMode[1] = cudaAddressModeClamp;\
-                                TR_Mip(i).addressMode[2] = cudaAddressModeClamp;\
-                                cudaBindTextureToArray(TR_Mip(i), tr_mips_dev[i]);
+#define BindTR_Mip(i) BindTextureObject(TR_Mip(i), tr_mips_dev[i], cudaAddressModeClamp);
     BindTR_Mip(0); BindTR_Mip(1); BindTR_Mip(2);
     BindTR_Mip(3); BindTR_Mip(4); BindTR_Mip(5);
     BindTR_Mip(6); BindTR_Mip(7);
@@ -1353,13 +1328,7 @@ void VolumeRender::SetHDRI(string path) {
 
     CheckError;
 
-    _HDRI.normalized = true;
-    _HDRI.filterMode = cudaFilterModeLinear;
-    _HDRI.addressMode[0] = cudaAddressModeWrap;
-    _HDRI.addressMode[1] = cudaAddressModeWrap;
-    _HDRI.addressMode[2] = cudaAddressModeWrap;
-
-    cudaBindTextureToArray(_HDRI, env_tex_dev, hdri_desc);
+    BindTextureObject(_HDRI, env_tex_dev, cudaAddressModeWrap);
 
     CheckError;
 }
